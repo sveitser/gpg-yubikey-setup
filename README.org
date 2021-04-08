@@ -75,7 +75,6 @@ sudo cryptsetup luksClose secret
 
 Save the public keys to the unencrypted partition.
 #+begin_src sh
-Pick strong passphrase for encrypted partition and save the private keys.
 sudo mkfs.ext2 /dev/sdb2
 sudo mkdir -p /mnt/public
 sudo mount /dev/sdb2 /mnt/public/

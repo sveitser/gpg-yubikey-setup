@@ -79,6 +79,7 @@ sudo mkfs.ext2 /dev/sdb2
 sudo mkdir -p /mnt/public
 sudo mount /dev/sdb2 /mnt/public/
 gpg --armor --export $KEYID | sudo tee /mnt/public/gpg-$KEYID-$(date +%F).txt
+sudo umount /dev/sdb2
 #+end_src
 
 * Configure smart cards

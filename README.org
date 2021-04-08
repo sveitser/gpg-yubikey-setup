@@ -1,0 +1,137 @@
+#+TITLE: GPG / yubikey setup
+
+Please see [[https://github.com/drduh/YubiKey-Guide][drduh's full guide]] for details.
+
+* Setup
+** Create bootable flash drive
+#+begin_src sh
+nix build -f yubikey-installer.nix --out-link installer
+sudo cp -v installer/iso/*.iso /dev/sdb
+sync
+#+end_src
+Boot from flash drive, download the guide then maybe turn off networking.
+** Configure GnuPG
+#+begin_src sh
+export GNUPGHOME=~/gnupg-workspace
+mkdir -p $GNUPGHOME
+wget -O $GNUPGHOME/gpg.conf https://raw.githubusercontent.com/drduh/config/master/gpg.conf
+#+end_src
+
+* Create keys
+Generate the master key, use strong passphrase.
+#+begin_src sh
+gpg --expert --full-generate-key
+#+end_src
+
+Optional, sign the new key with the old keys (not 100% sure about this part.)
+#+begin_src sh
+gpg --export-secret-keys --armor --output /tmp/new.sec
+# move to working system
+gpg  --default-key $OLDKEY --sign-key $KEYID
+#+end_src
+
+Create subkeys for the card
+#+begin_src sh
+FPR=$(gpg --list-options show-only-fpr-mbox --list-secret-keys | awk '{print $1}')
+gpg --batch --quick-add-key $FPR rsa4096 sign 5y
+gpg --batch --quick-add-key $FPR rsa4096 encrypt 5y
+gpg --batch --quick-add-key $FPR rsa4096 auth 5y
+#+end_src
+
+* Backup keys
+** Export keys and revocation certificate
+#+begin_src sh
+gpg --armor --export-secret-keys $KEYID > $GNUPGHOME/mastersub.key
+gpg --armor --export-secret-subkeys $KEYID > $GNUPGHOME/sub.key
+gpg --output $GNUPGHOME/revoke.asc --gen-revoke $KEYID
+#+end_src
+To import public key elsewhere
+#+begin_src sh
+gpg --import .../sub.key
+#+end_src
+
+** Backups
+Perform these steps once per backup.
+#+begin_src sh
+sudo dd if=/dev/urandom of=/dev/sdb bs=4M status=progress
+sudo fdisk /dev/sdb
+# o w
+sudo fdisk /dev/sdb
+# n p RET RET +25M
+# n p RET RET +25M w
+#+end_src
+
+Pick strong passphrase for encrypted partition and save the private keys.
+#+begin_src sh
+sudo cryptsetup luksFormat /dev/sdb1
+sudo cryptsetup luksOpen /dev/sdb1 secret
+sudo mkfs.ext2 /dev/mapper/secret -L gpg-$(date +%F)
+sudo mkdir -p /mnt/encrypted-storage
+sudo mount /dev/mapper/secret /mnt/encrypted-storage
+sudo cp -avi $GNUPGHOME /mnt/encrypted-storage/
+sudo umount /mnt/encrypted-storage/
+sudo cryptsetup luksClose secret
+#+end_src
+
+Save the public keys to the unencrypted partition.
+#+begin_src sh
+Pick strong passphrase for encrypted partition and save the private keys.
+sudo mkfs.ext2 /dev/sdb2
+sudo mkdir -p /mnt/public
+sudo mount /dev/sdb2 /mnt/public/
+gpg --armor --export $KEYID | sudo tee /mnt/public/gpg-$KEYID-$(date +%F).txt
+#+end_src
+
+* Configure smart cards
+** Configuration
+Change PIN (123456) and Admin PIN (12345678) and set personal details
+#+begin_src
+gpg --card-edit
+gpg/card> admin
+> passwd
+> 1
+> ...
+> 3
+> ...
+> q
+gpg/card> name
+> ...
+gpg/card> lang
+> en
+gpg/card> login
+> [email]
+#+end_src
+** Transfer keys
+- The command =keytocard= is destructive, only proceed after backup is done.
+- Make sure the key types (auth, sign, enc) match in the commands below
+#+begin_src sh
+gpg --edit-key $KEYID
+> key 1
+> keytocard
+> 1
+...
+> key 1 # to unselect key 1
+> key 2
+> keytocard
+...
+> key 2
+> key 3
+> keytocard
+...
+> save
+#+end_src
+
+To repeat for multiple smart cards, restore the key from backup and
+repeat the =keytocard= commands.
+#+begin_src
+mv -vi $GNUPGHOME $GNUPGHOME.1
+cp -avi /mnt/encrypted-storage/gnupg-workspace $GNUPGHOME
+#+end_src
+
+* Troubleshooting
+If prompted to insert card with specific serial number, [[https://security.stackexchange.com/a/223055][remove keygrip IDs]].
+#+begin_src sh
+gpg --list-secret-keys --with-keygrip
+rm ~/.gnupg/private-keys-v1.d/...
+gpg --card-status
+#+end_src

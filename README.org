@@ -129,9 +129,7 @@ cp -avi /mnt/encrypted-storage/gnupg-workspace $GNUPGHOME
 #+end_src
 
 * Troubleshooting
-If prompted to insert card with specific serial number, [[https://security.stackexchange.com/a/223055][remove keygrip IDs]].
+If prompted to insert card with specific serial number, [[https://security.stackexchange.com/a/191441][scan the new card]].
 #+begin_src sh
-gpg --list-secret-keys --with-keygrip
-rm ~/.gnupg/private-keys-v1.d/...
-gpg --card-status
+gpg-connect-agent "scd serialno" "learn --force" /bye
 #+end_src
